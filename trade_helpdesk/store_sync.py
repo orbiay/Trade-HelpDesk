@@ -18,14 +18,8 @@ def sync_stores(info: dict) -> None:
     Never raises: the user is authenticated either way, and support access
     matters less than letting them in.
     """
-    stores = info.get("stores") or []
-    if not stores:
-        # Also what a Trade store-service outage looks like, so it means
-        # "nothing to add" and never "remove their memberships".
-        return
-
     try:
-        _sync(info, stores)
+        _sync(info)
         # The callback is a GET, so nothing commits this for us.
         frappe.db.commit()
     except Exception:
@@ -40,16 +34,22 @@ def sync_stores(info: dict) -> None:
         frappe.db.commit()
 
 
-def _sync(info: dict, stores: list[dict]) -> None:
+def _sync(info: dict) -> None:
     email = get_email(info)
     if not email:
         return
 
+    # Unconditional: a buyer with no store still needs a Contact so they can
+    # raise tickets. Those tickets simply carry no customer - HD Ticket.customer
+    # is optional, and set_customer() leaves it blank when the contact belongs
+    # to none.
     contact_name = _ensure_contact(email)
     if not contact_name:
         return
 
-    for store in stores:
+    # No stores means no customer link, never the removal of an existing one:
+    # an empty array is also what a Trade store-service outage looks like.
+    for store in info.get("stores") or []:
         _link_to_customer(store, contact_name)
 
 
